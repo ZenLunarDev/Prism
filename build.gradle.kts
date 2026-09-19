@@ -2,8 +2,8 @@ plugins {
     id("java")
     kotlin("jvm") version "2.4.20"
     kotlin("kapt") version "2.4.20"
-    id("xyz.jpenilla.run-velocity") version "2.3.0"
-    id("com.github.johnrengelman.shadow") version "8.3.6"
+    id("xyz.jpenilla.run-velocity") version "3.0.2"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 repositories {
