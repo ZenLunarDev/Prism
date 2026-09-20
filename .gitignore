@@ -19,3 +19,11 @@ hs_err_pid*
 
 # Common working directory
 run
+
+# kapt/shadow build artifacts that leak into the project root
+com/
+velocity-plugin.json
+
+# Agent tool state
+.freebuff/
+.kilo/
