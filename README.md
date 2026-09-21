@@ -24,6 +24,30 @@ Proxy mode:
                           └──► Prism built-in world (embedded, persistent)
 ```
 
+## Benchmark: PrismMC vs Paper (measured, same machine & flags)
+
+Real measurements on Windows (i7-10750H), both servers started with
+`-Xms256M -Xmx512M`, vanilla world, one protocol-level bot joining:
+
+| Metric | **PrismMC** | **Paper 1.21.8** |
+|---|---|---|
+| Boot time | **~3–13 s** | 34–36 s |
+| RAM after boot (working set) | **229–240 MB** | 851–857 MB |
+| RAM with a player online | **240–241 MB** | 854–935 MB |
+| Private memory (player online) | **395 MB** | 892–971 MB |
+| TPS (idle & with bot) | **20.0** | 20.0 |
+| Heap headroom at 512 MB cap | ~50% used | nearly exhausted at spike |
+
+Takeaways: PrismMC boots ~3x faster, idles at roughly **a quarter of Paper's
+memory**, and holds a solid 20 TPS with a player online. Paper's memory spikes
+to nearly the 512 MB ceiling during world generation — at the same cap PrismMC
+stays comfortably under half of it.
+
+*Scope note: PrismMC (Minestom-based world engine) does not yet implement all
+vanilla mechanics (full mob AI, redstone, etc.). These numbers reflect the
+lightweight engine's footprint for lobbies, minigame and custom worlds — for a
+typical vanilla survival world, run Paper behind PrismMC in proxy mode.*
+
 ## Why PrismMC?
 
 | | PrismMC | Paper |
