@@ -43,7 +43,6 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.4")
     implementation("org.mariadb.jdbc:mariadb-java-client:3.4.2")
     implementation("org.xerial:sqlite-jdbc:3.46.1.0")
-    implementation("org.flywaydb:flyway-core:10.20.1")
 
     // WebSocket / HTTP API (Ktor)
     implementation("io.ktor:ktor-server-core:3.0.3")
@@ -58,6 +57,9 @@ dependencies {
     // Module system & DI
     implementation("com.google.guava:guava:33.3.1-jre")
     implementation("org.reflections:reflections:0.10.2")
+
+    // Embedded world server (Minestom — lets Prism host its own world without an external backend)
+    implementation("net.minestom:minestom:2025.07.27-1.21.8")
 
     // Brigadier (command tree API — provided by Velocity at runtime, needed at compile time)
     compileOnly("com.mojang:brigadier:1.0.18")
@@ -106,7 +108,22 @@ tasks {
                 "Build-Time" to System.currentTimeMillis().toString()
             )
         }
+        // Flyway 10 registers its plugins via ServiceLoader; Shadow 9 drops
+        // duplicate service-file entries BEFORE the merge transformer sees them,
+        // silently breaking migration scanning in the shaded jar. INCLUDE keeps
+        // every copy so the ServiceFileTransformer can merge them properly.
+        duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.INCLUDE
         mergeServiceFiles()
+
+        // Velocity's own jar carries a PARTIAL fastutil copy; parent-first
+        // classloading would resolve Minestom's fastutil calls against that
+        // incomplete copy and crash with NoClassDefFoundError. Relocate the
+        // full fastutil we shade into Prism's namespace so Minestom always
+        // sees a complete, private copy. Flare (Minestom's fastutil wrapper)
+        // must move with it or its internal it.unimi references would point
+        // at the relocated namespace while its own classes stay behind.
+        relocate("it.unimi.dsi.fastutil", "net.zld.prism.shaded.fastutil")
+        relocate("space.vectrix.flare", "net.zld.prism.shaded.flare")
     }
 
     runVelocity {

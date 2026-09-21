@@ -45,6 +45,27 @@ data class PlayersSettingsDefinition(
     @Setting("default-locale") val defaultLocale: String = "en_us",
 )
 
+/** settings.section.* — Prism's built-in Minestom world (server-software mode). */
+data class EmbeddedWorldSettingsDefinition(
+    @Setting("enabled") val enabled: Boolean = false,
+    @Setting("server-name") val serverName: String = "prism-world",
+    @Setting("host") val host: String = "127.0.0.1",
+    @Setting("port") val port: Int = 25580,
+    @Setting("brand-name") val brandName: String = "Prism",
+    @Setting("pool") val pool: String = "lobby",
+    @Setting("spawn-x") val spawnX: Double = 0.5,
+    @Setting("spawn-y") val spawnY: Double = 42.0,
+    @Setting("spawn-z") val spawnZ: Double = 0.5,
+    @Setting("forwarding-secret-file") val forwardingSecretFile: String = "forwarding.secret",
+    @Setting("generation") val generation: EmbeddedWorldGenerationDefinition = EmbeddedWorldGenerationDefinition(),
+)
+
+/** How the built-in world generates terrain. */
+data class EmbeddedWorldGenerationDefinition(
+    @Setting("type") val type: String = "flat",
+    @Setting("height") val height: Int = 40,
+)
+
 /** settings.section.* — command registration and UX. */
 data class CommandsSettingsDefinition(
     @Setting("server-command") val serverCommandEnabled: Boolean = true,

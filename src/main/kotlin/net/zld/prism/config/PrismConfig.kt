@@ -82,6 +82,7 @@ data class PrismConfig(
     val api: ApiDefinition = ApiDefinition(),
     val logging: LoggingDefinition = LoggingDefinition(),
     val chat: ChatSettingsDefinition = ChatSettingsDefinition(),
+    val embeddedWorld: EmbeddedWorldSettingsDefinition = EmbeddedWorldSettingsDefinition(),
     val players: PlayersSettingsDefinition = PlayersSettingsDefinition(),
     val commands: CommandsSettingsDefinition = CommandsSettingsDefinition(),
     val lifecycle: LifecycleSettingsDefinition = LifecycleSettingsDefinition(),
@@ -103,7 +104,7 @@ data class PrismConfig(
 
     companion object {
         /** Bump when a config migration is added; see [migrate]. */
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
 
         private val SECRET_KEYS = setOf("password", "jwt-secret")
 
@@ -146,7 +147,19 @@ data class PrismConfig(
          * In-place migration of a config node from [from] version to CURRENT_VERSION.
          * Add a branch per historical version bump.
          */
-        private fun migrate(node: CommentedConfigurationNode, from: Int, out: MutableList<String>) {
+        private fun migrate(node: org.spongepowered.configurate.ConfigurationNode, from: Int, out: MutableList<String>) {
+            if (from < 4) {
+                // v3 -> v4: embedded world server section was introduced
+                val ew = node.node("embedded-world")
+                if (ew.node("enabled").virtual()) {
+                    ew.node("enabled").raw(false)
+                    out.add("added embedded-world.enabled = false")
+                }
+                if (ew.node("port").virtual()) {
+                    ew.node("port").raw(25580)
+                    out.add("added embedded-world.port = 25580")
+                }
+            }
             if (from < 2) {
                 // v1 -> v2: health-check thresholds were introduced
                 val hc = node.node("health-check")
@@ -357,6 +370,25 @@ data class PrismConfig(
             val chatNode = node.node("chat")
             val channelsNode = chatNode.node("channels")
 
+            val embeddedWorldNode = node.node("embedded-world")
+            val embeddedWorldGenerationNode = embeddedWorldNode.node("generation")
+            val embeddedWorld = EmbeddedWorldSettingsDefinition(
+                embeddedWorldNode.node("enabled").getBoolean(false),
+                embeddedWorldNode.node("server-name").getString("prism-world"),
+                embeddedWorldNode.node("host").getString("127.0.0.1"),
+                embeddedWorldNode.node("port").getInt(25580),
+                embeddedWorldNode.node("brand-name").getString("Prism"),
+                embeddedWorldNode.node("pool").getString("lobby"),
+                embeddedWorldNode.node("spawn-x").getDouble(0.5),
+                embeddedWorldNode.node("spawn-y").getDouble(42.0),
+                embeddedWorldNode.node("spawn-z").getDouble(0.5),
+                embeddedWorldNode.node("forwarding-secret-file").getString("forwarding.secret"),
+                EmbeddedWorldGenerationDefinition(
+                    embeddedWorldGenerationNode.node("type").getString("flat"),
+                    embeddedWorldGenerationNode.node("height").getInt(40),
+                ),
+            )
+
             val playersNode = node.node("players")
             val players = PlayersSettingsDefinition(
                 playersNode.node("auto-register").getBoolean(true),
@@ -466,6 +498,7 @@ data class PrismConfig(
                 api = api,
                 logging = logging,
                 chat = chatSettings,
+                embeddedWorld = embeddedWorld,
                 players = players,
                 commands = commands,
                 lifecycle = lifecycle,
@@ -563,6 +596,20 @@ data class PrismConfig(
             for ((index, channel) in config.chat.channels.list.withIndex()) {
                 channelsNode.node("list").node(index).raw(channel)
             }
+
+            val embeddedWorldNode = node.node("embedded-world")
+            embeddedWorldNode.node("enabled").raw(config.embeddedWorld.enabled)
+            embeddedWorldNode.node("server-name").raw(config.embeddedWorld.serverName)
+            embeddedWorldNode.node("host").raw(config.embeddedWorld.host)
+            embeddedWorldNode.node("port").raw(config.embeddedWorld.port)
+            embeddedWorldNode.node("brand-name").raw(config.embeddedWorld.brandName)
+            embeddedWorldNode.node("pool").raw(config.embeddedWorld.pool)
+            embeddedWorldNode.node("spawn-x").raw(config.embeddedWorld.spawnX)
+            embeddedWorldNode.node("spawn-y").raw(config.embeddedWorld.spawnY)
+            embeddedWorldNode.node("spawn-z").raw(config.embeddedWorld.spawnZ)
+            embeddedWorldNode.node("forwarding-secret-file").raw(config.embeddedWorld.forwardingSecretFile)
+            embeddedWorldNode.node("generation").node("type").raw(config.embeddedWorld.generation.type)
+            embeddedWorldNode.node("generation").node("height").raw(config.embeddedWorld.generation.height)
 
             val playersNode = node.node("players")
             playersNode.node("auto-register").raw(config.players.autoRegister)

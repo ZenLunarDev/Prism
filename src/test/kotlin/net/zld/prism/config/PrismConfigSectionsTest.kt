@@ -261,7 +261,9 @@ class PrismConfigSectionsTest {
         val report = PrismConfig.loadWithReport(file)
 
         assertTrue(report.valid, "bundled config should be valid: ${report.errors}")
-        assertEquals(3, report.config.configVersion)
+        assertEquals(PrismConfig.CURRENT_VERSION, report.config.configVersion)
+        assertEquals(false, report.config.embeddedWorld.enabled)
+        assertEquals("prism-world", report.config.embeddedWorld.serverName)
         assertEquals(true, report.config.chat.enabled)
         assertEquals(true, report.config.api.rateLimitEnabled)
         assertEquals(120, report.config.api.rateLimitPerMinute)
@@ -273,7 +275,7 @@ class PrismConfigSectionsTest {
     // ------------------------------------------------------------------ migration
 
     @Test
-    fun `v2 config migrates to v3 without losing values`() {
+    fun `v2 config migrates to current version without losing values`() {
         val file = fileWith(
             """
             config-version = 2
@@ -285,10 +287,10 @@ class PrismConfigSectionsTest {
 
         val report = PrismConfig.loadWithReport(file)
 
-        assertEquals(3, report.config.configVersion)
+        assertEquals(PrismConfig.CURRENT_VERSION, report.config.configVersion)
         assertEquals(77, report.config.chat.historySize)
         assertTrue(report.migrationsApplied.isNotEmpty(), "migration should be recorded")
         // on-disk file is upgraded too
-        assertEquals(3, PrismConfig.load(file).configVersion)
+        assertEquals(PrismConfig.CURRENT_VERSION, PrismConfig.load(file).configVersion)
     }
 }

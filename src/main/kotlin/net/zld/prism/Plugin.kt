@@ -77,6 +77,7 @@ class PrismPlugin @Inject constructor(
     private lateinit var chatManager: ChatManager
     private lateinit var commandAPIManager: CommandAPIManager
     private lateinit var moduleManager: ModuleManager
+    private var embeddedWorldServer: net.zld.prism.world.EmbeddedWorldServer? = null
 
     // Legacy command
     private lateinit var serverCommand: ServerCommand
@@ -96,6 +97,14 @@ class PrismPlugin @Inject constructor(
         val syncEnabled = syncManager.initialize(config!!.redis?.url ?: "")
 
         fallbackManager = FallbackManager(proxy, logger, config!!.fallback) { pools.values }
+
+        // Embedded world (server-software mode) — must start BEFORE pools are
+        // built so its listener can be registered as a regular server definition
+        if (config!!.embeddedWorld.enabled) {
+            logger.info("Starting embedded world server (Minestom)...")
+            embeddedWorldServer = net.zld.prism.world.EmbeddedWorldServer(config!!.embeddedWorld, logger)
+            embeddedWorldServer!!.start()
+        }
 
         // Pools are built after fallback/health so their constructors see fully initialized state
         initializePools()
@@ -164,6 +173,7 @@ class PrismPlugin @Inject constructor(
     fun onProxyShutdown(event: ProxyShutdownEvent) {
         logger.info("Prism Proxy Core shutting down...")
 
+        embeddedWorldServer?.stop()
         lifecycleManager.shutdown()
         healthChecker.shutdown()
         wsApiManager.shutdown()
@@ -330,12 +340,39 @@ class PrismPlugin @Inject constructor(
 
     private fun initializePools() {
         pools.clear()
-        for (poolDef in config!!.pools) {
+        for (poolDef in effectivePoolDefs()) {
             // Register with the proxy FIRST — ServerPool's constructor rebuilds its
             // membership from proxy.getServer(), which would otherwise find nothing
             registerPoolServers(poolDef)
             pools[poolDef.name] = ServerPool(proxy, poolDef)
         }
+    }
+
+    /**
+     * Config pools plus the embedded world listener (when running), injected
+     * into its target pool so it routes/falls back like any other server.
+     */
+    private fun effectivePoolDefs(): List<net.zld.prism.config.PoolDefinition> {
+        val ew = embeddedWorldServer?.takeIf { it.isRunning } ?: return config!!.pools
+        val def = net.zld.prism.config.ServerDefinition(
+            name = ew.getServerName(),
+            host = "127.0.0.1",
+            port = ew.getPort(),
+            weight = 1,
+            fallback = false,
+            motd = "Prism built-in world",
+        )
+        val defs = config!!.pools.toMutableList()
+        val idx = defs.indexOfFirst { it.name == ew.getPoolName() }
+        if (idx >= 0) {
+            val pool = defs[idx]
+            if (pool.servers.none { it.name == def.name }) {
+                defs[idx] = pool.copy(servers = pool.servers + def)
+            }
+        } else {
+            defs.add(net.zld.prism.config.PoolDefinition(name = ew.getPoolName(), servers = listOf(def)))
+        }
+        return defs
     }
 
     private fun registerPoolServers(poolDef: net.zld.prism.config.PoolDefinition) {

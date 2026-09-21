@@ -3,8 +3,8 @@ package net.zld.prism.config.db
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import net.zld.prism.PrismPlugin
-import org.flywaydb.core.Flyway
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.sql.Connection
 import java.sql.ResultSet
 import java.util.Properties
@@ -13,7 +13,6 @@ import javax.sql.DataSource
 class DatabaseConfigManager(private val plugin: PrismPlugin) {
     private val logger = LoggerFactory.getLogger(DatabaseConfigManager::class.java)
     private var dataSource: HikariDataSource? = null
-    private var flyway: Flyway? = null
     private val configCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun initialize(
@@ -57,13 +56,12 @@ class DatabaseConfigManager(private val plugin: PrismPlugin) {
 
             dataSource = HikariDataSource(hikariConfig)
 
-            flyway = Flyway.configure()
-                .dataSource(dataSource)
-                .locations("db/migration")
-                .baselineOnMigrate(true)
-                .load()
-
-            flyway?.migrate()
+            // Flyway 10's scanner is unreliable inside shaded jars (flyway#3811),
+            // so migrations run through a simple JDBC runner instead: extract the
+            // bundled SQL files and apply each one exactly once, tracked in a
+            // schema history table.
+            val migrationsDir = prepareMigrationDirectory()
+            runMigrations(dataSource!!, migrationsDir)
 
             // Never log the raw JDBC URL — it can embed credentials
             logger.info("Database connected and migrated: {}", sanitizeJdbcUrl(jdbcUrl))
@@ -72,6 +70,100 @@ class DatabaseConfigManager(private val plugin: PrismPlugin) {
             logger.error("Failed to initialize database: {}", e.message, e)
             return false
         }
+    }
+
+    /**
+     * Applies every bundled migration exactly once. Files must be named
+     * V<version>__<description>.sql and are executed in version order.
+     * Each file runs as a single transaction and is recorded in prism_schema_history.
+     */
+    private fun runMigrations(dataSource: HikariDataSource, migrationsDir: File) {
+        val files = migrationsDir.listFiles { f -> f.name.matches(Regex("V\\d+__.*\\.sql")) }
+            ?.sortedBy { it.name.substringBefore('_').removePrefix("V").toInt() }
+            ?: emptyList()
+        logger.debug("Migration dir: {} — {} candidate file(s)", migrationsDir.absolutePath, files.size)
+
+        dataSource.connection.use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate(
+                    """CREATE TABLE IF NOT EXISTS prism_schema_history (
+                        version INT PRIMARY KEY,
+                        description VARCHAR(255) NOT NULL,
+                        applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )"""
+                )
+            }
+
+            val applied = mutableSetOf<Int>()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT version FROM prism_schema_history").use { rs ->
+                    while (rs.next()) applied.add(rs.getInt(1))
+                }
+            }
+
+            for (file in files) {
+                val version = file.name.substringBefore('_').removePrefix("V").toInt()
+                if (version in applied) continue
+
+                val autoCommit = conn.autoCommit
+                conn.autoCommit = false
+                try {
+                    conn.createStatement().use { stmt ->
+                        stmt.execute(file.readText())
+                    }
+                    conn.prepareStatement("INSERT INTO prism_schema_history (version, description) VALUES (?, ?)").use { ins ->
+                        ins.setInt(1, version)
+                        ins.setString(2, file.name.substringAfter("__").removeSuffix(".sql"))
+                        ins.executeUpdate()
+                    }
+                    conn.commit()
+                    logger.info("Applied migration V{}: {}", version, file.name)
+                } catch (e: Exception) {
+                    conn.rollback()
+                    throw e
+                } finally {
+                    conn.autoCommit = autoCommit
+                }
+            }
+        }
+    }
+
+    /**
+     * Copies bundled SQL migrations from the plugin jar into <dataDirectory>/migrations
+     * so they can be applied from a stable filesystem location.
+     */
+    private fun prepareMigrationDirectory(): File {
+        val migrationsDir = File(plugin.dataDirectory, "migrations")
+        migrationsDir.mkdirs()
+
+        val classLoader = javaClass.classLoader
+        val urls = classLoader.getResources("db/migration")
+        while (urls.hasMoreElements()) {
+            val url = urls.nextElement()
+            if (url.protocol != "jar") continue
+            val jarPath = java.net.URLDecoder.decode(
+                url.path.removePrefix("file:").substringBefore("!"), Charsets.UTF_8.name()
+            )
+            try {
+                java.util.jar.JarFile(jarPath).use { jar ->
+                    for (entry in jar.entries().asSequence()) {
+                        if (entry.isDirectory || !entry.name.startsWith("db/migration/") || !entry.name.endsWith(".sql")) continue
+                        val target = File(migrationsDir, entry.name.substringAfterLast('/'))
+                        if (!target.exists() || target.length() != entry.size) {
+                            // read straight from the JarFile — a leading-slash
+                            // getResourceAsStream returns null in plugin classloaders
+                            jar.getInputStream(entry).use { input ->
+                                target.outputStream().use { input.copyTo(it) }
+                            }
+                            logger.info("Extracted migration {} to {}", target.name, migrationsDir.name)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("Could not extract bundled migrations: {}", e.message)
+            }
+        }
+        return migrationsDir
     }
 
     /** Strips user/password query parameters from a JDBC URL before logging. */
