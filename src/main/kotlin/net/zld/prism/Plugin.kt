@@ -43,9 +43,9 @@ import java.time.Instant
 
 @Plugin(
     id = "prism",
-    name = "Prism",
+    name = "PrismMC",
     version = "1.0-SNAPSHOT",
-    description = "Prism - Modern Velocity Proxy Orchestration Platform",
+    description = "Modern software. Built to perform. Fast, secure server software with an expanding plugin API.",
     authors = ["ZenLunarDev"]
 )
 class PrismPlugin @Inject constructor(
@@ -85,7 +85,7 @@ class PrismPlugin @Inject constructor(
 
     @Subscribe
     fun onProxyInitialization(event: ProxyInitializeEvent) {
-        logger.info("Prism Proxy Core starting...")
+        logger.info("PrismMC starting...")
 
         // Load configuration first
         loadConfig()
@@ -159,7 +159,7 @@ class PrismPlugin @Inject constructor(
         moduleManager.initialize()
 
         // Log startup info
-        logger.info("Prism Proxy Core successfully enabled!")
+        logger.info("PrismMC successfully enabled — modern software, built to perform.")
         logger.info("  Pools: {}", pools.size)
         logger.info("  Servers registered: {}", proxy.allServers.size)
         logger.info("  Metrics: enabled (Prometheus)")
@@ -171,7 +171,7 @@ class PrismPlugin @Inject constructor(
 
     @Subscribe
     fun onProxyShutdown(event: ProxyShutdownEvent) {
-        logger.info("Prism Proxy Core shutting down...")
+        logger.info("PrismMC shutting down...")
 
         embeddedWorldServer?.stop()
         lifecycleManager.shutdown()
@@ -184,7 +184,7 @@ class PrismPlugin @Inject constructor(
         chatManager.shutdown()
         metricsManager.shutdown()
 
-        logger.info("Prism Proxy Core disabled!")
+        logger.info("PrismMC disabled!")
     }
 
     @Subscribe

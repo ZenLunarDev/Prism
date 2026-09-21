@@ -57,6 +57,8 @@ data class EmbeddedWorldSettingsDefinition(
     @Setting("spawn-y") val spawnY: Double = 42.0,
     @Setting("spawn-z") val spawnZ: Double = 0.5,
     @Setting("forwarding-secret-file") val forwardingSecretFile: String = "forwarding.secret",
+    @Setting("world-folder") val worldFolder: String = "prism-world",
+    @Setting("persistence") val persistence: EmbeddedWorldPersistenceDefinition = EmbeddedWorldPersistenceDefinition(),
     @Setting("generation") val generation: EmbeddedWorldGenerationDefinition = EmbeddedWorldGenerationDefinition(),
 )
 
@@ -64,6 +66,12 @@ data class EmbeddedWorldSettingsDefinition(
 data class EmbeddedWorldGenerationDefinition(
     @Setting("type") val type: String = "flat",
     @Setting("height") val height: Int = 40,
+)
+
+/** Disk persistence for the built-in world (Anvil format). */
+data class EmbeddedWorldPersistenceDefinition(
+    @Setting("enabled") val enabled: Boolean = true,
+    @Setting("autosave-interval-seconds") val autosaveIntervalSeconds: Int = 120,
 )
 
 /** settings.section.* — command registration and UX. */

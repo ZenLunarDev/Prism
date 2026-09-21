@@ -383,6 +383,11 @@ data class PrismConfig(
                 embeddedWorldNode.node("spawn-y").getDouble(42.0),
                 embeddedWorldNode.node("spawn-z").getDouble(0.5),
                 embeddedWorldNode.node("forwarding-secret-file").getString("forwarding.secret"),
+                embeddedWorldNode.node("world-folder").getString("prism-world"),
+                EmbeddedWorldPersistenceDefinition(
+                    embeddedWorldNode.node("persistence").node("enabled").getBoolean(true),
+                    embeddedWorldNode.node("persistence").node("autosave-interval-seconds").getInt(120),
+                ),
                 EmbeddedWorldGenerationDefinition(
                     embeddedWorldGenerationNode.node("type").getString("flat"),
                     embeddedWorldGenerationNode.node("height").getInt(40),
@@ -608,6 +613,9 @@ data class PrismConfig(
             embeddedWorldNode.node("spawn-y").raw(config.embeddedWorld.spawnY)
             embeddedWorldNode.node("spawn-z").raw(config.embeddedWorld.spawnZ)
             embeddedWorldNode.node("forwarding-secret-file").raw(config.embeddedWorld.forwardingSecretFile)
+            embeddedWorldNode.node("world-folder").raw(config.embeddedWorld.worldFolder)
+            embeddedWorldNode.node("persistence").node("enabled").raw(config.embeddedWorld.persistence.enabled)
+            embeddedWorldNode.node("persistence").node("autosave-interval-seconds").raw(config.embeddedWorld.persistence.autosaveIntervalSeconds)
             embeddedWorldNode.node("generation").node("type").raw(config.embeddedWorld.generation.type)
             embeddedWorldNode.node("generation").node("height").raw(config.embeddedWorld.generation.height)
 
