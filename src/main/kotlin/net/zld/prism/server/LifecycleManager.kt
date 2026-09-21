@@ -37,6 +37,9 @@ class LifecycleManager(
     private val poolLookup: () -> Collection<ServerPool>,
     private val syncManager: CrossProxySyncManager? = null,
 ) {
+    /** PrismMC plugin API event bus — set after construction. */
+    var apiEventBus: net.zld.prism.api.event.PrismEventBus? = null
+
     private val mini = MiniMessage.miniMessage()
 
     private val crashTrackers = ConcurrentHashMap<String, CrashTracker>()
@@ -57,6 +60,7 @@ class LifecycleManager(
         pool.setDraining(true)
         logger.warn("Pool '{}' is now DRAINING — new connections will be routed elsewhere", poolName)
         runCatching { plugin.getWsApiManager().broadcastAll("pool_draining", poolName) }
+        apiEventBus?.fire(net.zld.prism.api.event.PoolDrainChangeEvent(pool.name, true))
 
         val moved = movePlayersOutOfPool(pool, force = false)
 
@@ -79,6 +83,7 @@ class LifecycleManager(
         pendingTasks.remove("drain:${pool.name}")?.cancel()
         logger.info("Pool '{}' is back in rotation", pool.name)
         runCatching { plugin.getWsApiManager().broadcastAll("pool_undrained", pool.name) }
+        apiEventBus?.fire(net.zld.prism.api.event.PoolDrainChangeEvent(pool.name, false))
         return true
     }
 

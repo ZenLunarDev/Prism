@@ -79,6 +79,10 @@ class PrismPlugin @Inject constructor(
     private lateinit var moduleManager: ModuleManager
     private var embeddedWorldServer: net.zld.prism.world.EmbeddedWorldServer? = null
 
+    // PrismMC plugin API (extensions + event bus)
+    lateinit var extensionManager: net.zld.prism.api.ExtensionManager
+        private set
+
     // Legacy command
     private lateinit var serverCommand: ServerCommand
     private lateinit var glistCommand: GListCommand
@@ -147,6 +151,12 @@ class PrismPlugin @Inject constructor(
         // Initialize Module system
         moduleManager = ModuleManager(this, injector)
 
+        // PrismMC plugin API — extensions loaded after all core systems exist
+        extensionManager = net.zld.prism.api.ExtensionManager(this)
+        healthChecker.apiEventBus = extensionManager.eventBus
+        lifecycleManager.apiEventBus = extensionManager.eventBus
+        extensionManager.loadAll()
+
         // Register commands
         serverCommand = ServerCommand(this)
         glistCommand = GListCommand(this)
@@ -173,6 +183,7 @@ class PrismPlugin @Inject constructor(
     fun onProxyShutdown(event: ProxyShutdownEvent) {
         logger.info("PrismMC shutting down...")
 
+        extensionManager.unloadAll()
         embeddedWorldServer?.stop()
         lifecycleManager.shutdown()
         healthChecker.shutdown()
@@ -191,13 +202,36 @@ class PrismPlugin @Inject constructor(
     fun onPlayerChooseInitialServer(event: PlayerChooseInitialServerEvent) {
         val player = event.player
         val initialServer = selectInitialServer(player)
-        initialServer?.let { event.setInitialServer(it) }
+        if (initialServer != null) {
+            val route = net.zld.prism.api.event.PlayerRouteEvent(
+                player.uniqueId, player.username, initialServer.serverInfo.name,
+                poolOfServer(initialServer.serverInfo.name) ?: "",
+                net.zld.prism.api.event.RouteReason.INITIAL_JOIN,
+            )
+            if (extensionManager.eventBus.fire(route)) {
+                event.setInitialServer(initialServer)
+            }
+        }
     }
+
+    private fun poolOfServer(serverName: String): String? =
+        pools.values.firstOrNull { it.hasServer(serverName) }?.name
 
     @Subscribe
     fun onServerPreConnect(event: ServerPreConnectEvent) {
         val targetServer = event.originalServer
         val pool = pools.values.find { it.hasServer(targetServer.serverInfo.name) } ?: return
+
+        // PrismMC API: let extensions veto/observe the route (command switches too)
+        val routeEvent = net.zld.prism.api.event.PlayerRouteEvent(
+            event.player.uniqueId, event.player.username, targetServer.serverInfo.name, pool.name,
+            net.zld.prism.api.event.RouteReason.COMMAND_SWITCH,
+        )
+        if (!extensionManager.eventBus.fire(routeEvent)) {
+            logger.info("Extension cancelled route for {} to '{}'", event.player.username, targetServer.serverInfo.name)
+            event.result = ServerPreConnectEvent.ServerResult.denied()
+            return
+        }
 
         // Draining pools never accept new joins — reroute if a fallback exists
         if (pool.isDraining()) {

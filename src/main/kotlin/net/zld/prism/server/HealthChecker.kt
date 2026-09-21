@@ -35,6 +35,8 @@ class HealthChecker(
     private val onServerOffline: ((serverName: String) -> Unit)? = null,
     private val onServerOnline: ((serverName: String) -> Unit)? = null,
 ) {
+    /** PrismMC plugin API event bus — set after construction to avoid init-order coupling. */
+    var apiEventBus: net.zld.prism.api.event.PrismEventBus? = null
     private val task: ScheduledTask? = if (config.enabled) {
         proxy.scheduler.buildTask(pluginOwner, Runnable { checkAllServers() })
             .delay(config.intervalSeconds.toLong(), TimeUnit.SECONDS)
@@ -119,6 +121,8 @@ class HealthChecker(
                 }
                 // Broadcast health transitions so other proxies stop routing there
                 syncManager?.publishServerHealthChanged(serverName, healthy)
+                // PrismMC plugin API
+                apiEventBus?.fire(net.zld.prism.api.event.PoolHealthChangeEvent(pool.name, serverName, healthy))
             }
         }
     }
