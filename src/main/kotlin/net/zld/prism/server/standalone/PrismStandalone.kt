@@ -26,6 +26,10 @@ object PrismStandalone {
 
     private val logger = LoggerFactory.getLogger("prism")
 
+    /** Most recent tick duration in ms, fed by ServerTickMonitorEvent. */
+    @Volatile
+    private var lastTickMs = 0.0
+
     private const val BANNER = """
 
          ██▓███   ██▀███   ██▓  ██████  ███▄ ▄███▓    ███▄ ▄███▓ ▄████▄  
@@ -114,6 +118,30 @@ object PrismStandalone {
 
         EmbeddedWorldCommands.registerAll()
 
+        // Paper-style console heartbeat: TPS + player count every 30s, plus
+        // world autosave on the interval configured in embedded-world.persistence
+        val autosaveIntervalMs = config.embeddedWorld.persistence.autosaveIntervalSeconds * 1000L
+        var lastAutosave = System.currentTimeMillis()
+        MinecraftServer.getGlobalEventHandler()
+            .addListener(net.minestom.server.event.server.ServerTickMonitorEvent::class.java) { event ->
+                lastTickMs = event.tickMonitor.tickTime
+            }
+        val heartbeatTask = MinecraftServer.getSchedulerManager().buildTask {
+            val players = MinecraftServer.getConnectionManager().onlinePlayers.size
+            val tps = if (lastTickMs <= 0.0) 20.0 else (1000.0 / lastTickMs).coerceIn(0.0, 20.0)
+            logger.info(
+                "[heartbeat] TPS: {} | Players online: {} | Memory: {} MB",
+                String.format(java.util.Locale.ROOT, "%.1f", tps), players,
+                (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / (1024 * 1024),
+            )
+            if (autosaveIntervalMs > 0 && System.currentTimeMillis() - lastAutosave >= autosaveIntervalMs) {
+                lastAutosave = System.currentTimeMillis()
+                runCatching { instance.saveChunksToStorage().get() }
+                    .onSuccess { logger.info("[autosave] world saved") }
+                    .onFailure { logger.warn("[autosave] failed: {}", it.message) }
+            }
+        }.repeat(java.time.Duration.ofSeconds(30)).schedule()
+
         val listenHost = if (ew.host == "127.0.0.1") "0.0.0.0" else ew.host
         server.start(listenHost, ew.port)
         val bootSeconds = (System.currentTimeMillis() - start) / 1000.0
@@ -128,6 +156,7 @@ object PrismStandalone {
             if (line.isEmpty()) continue
             if (line.equals("stop", ignoreCase = true) || line.equals("exit", ignoreCase = true)) {
                 logger.info("Stopping — saving world...")
+                heartbeatTask.cancel()
                 runCatching { instance.saveChunksToStorage().get() }
                 extensionManager.unloadAll()
                 MinecraftServer.stopCleanly()
