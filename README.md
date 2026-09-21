@@ -8,26 +8,63 @@ performant, and stable software available.
 
 ## What is PrismMC?
 
-PrismMC is a modern Minecraft server platform written in Kotlin. It works as a
-**high-performance proxy** in front of any backend servers (Paper, Fabric, vanilla…)
-— and with its **built-in world server**, it can also run as a **standalone server
-software** with no external backend at all.
+PrismMC is a **standalone Minecraft server software** written in Kotlin — a complete,
+self-contained server that boots in seconds and runs light. It can also run in
+**proxy mode** in front of existing backends (Paper, Fabric, vanilla…).
 
 ```
-Minecraft Client ──► PrismMC proxy ──► Paper / Fabric / vanilla backends
-                        │
-                        └──► Prism built-in world (embedded, persistent)
+Standalone (one jar, no dependencies):
+
+  java -jar prism.jar          ← that's the whole server
+
+Proxy mode:
+
+  Minecraft Client ──► PrismMC proxy ──► Paper / Fabric / vanilla backends
+                          │
+                          └──► Prism built-in world (embedded, persistent)
 ```
+
+## Why PrismMC?
+
+| | PrismMC | Paper |
+|---|---|---|
+| **Boot time** | ~4–5 seconds | ~15–25 seconds |
+| **Memory floor** | runs comfortably in 512 MB | typically wants 1–2 GB |
+| **Config depth** | Purpur-style deep sections for *every* subsystem | Paper/Purpur configs |
+| **Extensibility** | built-in extension API (event bus + isolated classloaders) | plugin API (separate ecosystem) |
+| **Modes** | standalone server *and* proxy in one jar | server only |
+
+## Quick start (standalone)
+
+```bash
+java -jar prism.jar
+```
+
+1. First boot writes `eula.txt` — set `eula=true` (https://aka.ms/MinecraftEULA).
+2. Second boot writes `prism.conf` (standalone profile, embedded world enabled)
+   and starts listening — default port `25580`, Minecraft 1.21.8.
+3. Play. Blocks persist to disk (Anvil format) across restarts.
+
+Console: type commands directly (`list`, `gamemode`, `stop` to save & shut down).
+
+## Quick start (proxy mode)
+
+1. Drop `prism.jar` into a Velocity server's `plugins/` folder.
+2. Edit `plugins/prism/prism.conf` — pools, servers, every subsystem.
+3. Optional: set `embedded-world.enabled = true` to give the proxy its own
+   persistent world with no external backend.
 
 ## Highlights
 
-- **Pool-based routing** — servers are organized into pools with weighted selection
-- **Health checking with hysteresis** — no flapping; consecutive failures/successes
-  gate state transitions, with automatic fallback rerouting
+- **Standalone server** — in-process world engine (Minestom), Anvil persistence,
+  in-game commands (`/gamemode`, `/tp`, `/setblock`), real console
+- **Pool-based routing** — servers organized into pools with weighted selection
+- **Health checking with hysteresis** — no flapping; automatic fallback rerouting
 - **Lifecycle orchestration** — `/prism drain <pool>`, `/prism restart <pool>`,
   crash-threshold auto-restart with configurable restart commands
-- **Embedded world server** — in-process Minestom world with Anvil persistence
-  (blocks survive restarts) and in-game commands (`/gamemode`, `/tp`, `/setblock`)
+- **Extension API** — `PrismExtension` interface, PrismMC event bus
+  (`PoolHealthChangeEvent`, `PlayerRouteEvent` (cancellable), `ProxyChatEvent`
+  (cancellable) …), isolated classloaders per extension, per-extension data folders
 - **Purpur-style granular config** — deep `chat`, `players`, `commands`, `lifecycle`,
   `sync`, `metrics`, `advanced`, `messages`, `embedded-world` sections, every key
   documented, with automatic config-version migrations
@@ -35,11 +72,37 @@ Minecraft Client ──► PrismMC proxy ──► Paper / Fabric / vanilla back
   never logged
 - **Cross-proxy sync** — Redis pub/sub for multi-proxy deployments
 - **Database support** — PostgreSQL/MySQL/SQLite with idempotent migrations
-- **WebSocket API** — JWT-secured dashboard API with rate limiting and metrics
+- **WebSocket API** — JWT-secured dashboard API with rate limiting
 - **Prometheus metrics** — JVM and pool metrics out of the box
-- **Fast releases & helpful support** — quick iterations, CI-verified builds
 
-## Commands (in game)
+## Writing an extension
+
+```java
+public class HelloExtension implements PrismExtension {
+    @Override public String getId() { return "hello"; }
+
+    @Override
+    public void onEnable(PrismApi api) {
+        api.events().listen(PoolHealthChangeEvent.class, getId(), e ->
+            api.logger().info("{} is now {}", e.getServerName(),
+                e.getHealthy() ? "ONLINE" : "OFFLINE"));
+    }
+}
+```
+
+Manifest attribute `Prism-Extension: com.example.HelloExtension`, jar into
+`extensions/`. Full example in [`examples/hello-extension/`](examples/hello-extension/).
+
+## Building
+
+```bash
+./gradlew build        # compile + test + shadowJar → build/libs/prism-*.jar
+./gradlew runVelocity  # run a dev proxy
+```
+
+Requires JDK 21.
+
+## Commands (in game, proxy mode)
 
 | Command | Purpose |
 |---|---|
@@ -49,22 +112,6 @@ Minecraft Client ──► PrismMC proxy ──► Paper / Fabric / vanilla back
 | `/prism restart <pool>` | Manual restart trigger |
 | `/server <name>` | Switch servers |
 | `/glist` | Players per pool |
-
-## Building
-
-```bash
-./gradlew build        # compile + test + shadowJar
-./gradlew runVelocity  # run a dev proxy
-```
-
-Requires JDK 21. The production jar lands in `build/libs/`.
-
-## Quick start
-
-1. Drop the jar into your Velocity `plugins/` folder (or run `runVelocity`).
-2. Edit `plugins/prism/prism.conf` — pools, servers, and every subsystem.
-3. Optional: set `embedded-world.enabled = true` to run PrismMC as a
-   standalone server with its own persistent world.
 
 ---
 

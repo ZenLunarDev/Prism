@@ -124,7 +124,7 @@ class PrismConfigTest {
 
         // Everything else falls back to defaults
         assertEquals(HealthCheckDefinition(), config.healthCheck)
-        assertEquals("lobby", config.fallback.defaultTarget)
+        assertEquals("", config.fallback.defaultTarget) // empty default = no default target set
         assertTrue(config.api.enabled)
         assertEquals("INFO", config.logging.level)
     }

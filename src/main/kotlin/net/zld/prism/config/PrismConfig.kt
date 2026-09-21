@@ -75,7 +75,7 @@ data class LoggingDefinition(
 
 data class PrismConfig(
     val pools: List<PoolDefinition> = emptyList(),
-    val fallback: FallbackChainDefinition = FallbackChainDefinition(emptyList(), "lobby"),
+    val fallback: FallbackChainDefinition = FallbackChainDefinition(emptyList(), ""),
     val healthCheck: HealthCheckDefinition = HealthCheckDefinition(),
     val database: DatabaseDefinition = DatabaseDefinition(),
     val redis: RedisDefinition = RedisDefinition(),
@@ -220,9 +220,16 @@ data class PrismConfig(
                     warnings.add("fallback chain references pool '$chainPool' which is not defined in pools")
                 }
             }
-            val knownServers = config.pools.flatMap { it.servers }.map { it.name }.toSet()
-            if (config.fallback.defaultTarget !in knownServers) {
+            val knownServers = config.pools.flatMap { it.servers }.map { it.name }.toMutableSet()
+            // The embedded world server is registered at runtime, so it is a
+            // valid default target even though it is not in the pools section
+            if (config.embeddedWorld.enabled) {
+                knownServers.add(config.embeddedWorld.serverName)
+            }
+            if (config.fallback.defaultTarget.isNotEmpty() && config.fallback.defaultTarget !in knownServers) {
                 errors.add("fallback default target '${config.fallback.defaultTarget}' is not a known server")
+            } else if (config.fallback.defaultTarget.isEmpty() && config.pools.isNotEmpty()) {
+                warnings.add("no fallback.default set — new players with no route will be disconnected")
             }
 
             // --- Health check sanity ---
@@ -320,7 +327,7 @@ data class PrismConfig(
                     if (item != null) fallbackChain.add(item)
                 }
             }
-            val defaultTarget = fallbackNode.node("default").getString("lobby")
+            val defaultTarget = fallbackNode.node("default").getString("")
             val fallback = FallbackChainDefinition(fallbackChain, defaultTarget)
 
             val healthCheckNode = node.node("health-check")

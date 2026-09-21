@@ -69,8 +69,10 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:3.15.0")
     implementation("org.apache.commons:commons-text:1.12.0")
 
-    // Logging (provided by Velocity — compileOnly so we never shade over the proxy's own logging)
-    compileOnly("ch.qos.logback:logback-classic:1.5.6")
+    // Logging — shaded so `java -jar prism.jar` (standalone) has a real
+    // logger. In proxy mode Velocity's own logback wins via parent-first
+    // delegation, so the shaded copy is inert there.
+    implementation("ch.qos.logback:logback-classic:1.5.6")
     compileOnly("net.logstash.logback:logstash-logback-encoder:8.0")
 
     // Adventure (provided by Velocity)
@@ -101,8 +103,10 @@ tasks {
 
     shadowJar {
         archiveClassifier.set("")
+        archiveBaseName.set("prism")
         manifest {
             attributes(
+                "Main-Class" to "net.zld.prism.standalone.PrismStandalone",
                 "Implementation-Version" to project.version.toString(),
                 "Built-By" to System.getProperty("user.name"),
                 "Build-Time" to System.currentTimeMillis().toString()

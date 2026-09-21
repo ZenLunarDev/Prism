@@ -20,7 +20,17 @@ import java.util.jar.JarFile
  * so extensions are isolated from each other but can use Prism's shaded
  * libraries. Unloading closes the classloader and removes its event listeners.
  */
-class ExtensionManager(private val plugin: PrismPlugin) {
+class ExtensionManager(
+    private val plugin: PluginServices,
+) {
+
+    /** Minimal view of the running server that extensions infra needs. */
+    interface PluginServices {
+        val dataDirectory: File
+        fun getVersion(): String
+        fun getAllPools(): Collection<net.zld.prism.server.ServerPool>
+        fun getPool(name: String): net.zld.prism.server.ServerPool?
+    }
 
     private val logger: Logger = LoggerFactory.getLogger("prism.extensions")
     val eventBus = PrismEventBus(logger)
@@ -102,7 +112,7 @@ class ExtensionManager(private val plugin: PrismPlugin) {
 }
 
 /** Read-only pool view backed by the real ServerPool registry. */
-internal class PoolViewImpl(private val plugin: PrismPlugin) : PoolView {
+internal class PoolViewImpl(private val plugin: ExtensionManager.PluginServices) : PoolView {
     override fun poolNames(): List<String> = plugin.getAllPools().map { it.name }.sorted()
 
     override fun serversIn(pool: String): List<String> =

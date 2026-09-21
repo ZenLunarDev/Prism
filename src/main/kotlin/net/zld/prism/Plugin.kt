@@ -53,10 +53,10 @@ class PrismPlugin @Inject constructor(
     val proxy: ProxyServer,
     @DataDirectory dataDirectoryPath: Path,
     private val injector: Injector,
-) {
+) : net.zld.prism.api.ExtensionManager.PluginServices {
 
     // Velocity injects a Path for @DataDirectory; expose it as File for the rest of the codebase
-    val dataDirectory: File = dataDirectoryPath.toFile()
+    override val dataDirectory: File = dataDirectoryPath.toFile()
 
     val startTime: Long = System.currentTimeMillis()
 
@@ -606,10 +606,10 @@ class PrismPlugin @Inject constructor(
     }
 
     // Public API
-    fun getPool(name: String): ServerPool? = pools[name]
-    fun getAllPools(): Collection<ServerPool> = pools.values
+    override fun getPool(name: String): ServerPool? = pools[name]
+    override fun getAllPools(): Collection<ServerPool> = pools.values
     fun getConfig(): PrismConfig = config!!
-    fun getVersion(): String = "1.0-SNAPSHOT"
+    override fun getVersion(): String = "1.0-SNAPSHOT"
     fun getFallbackManager(): FallbackManager = fallbackManager
     fun getHealthChecker(): HealthChecker = healthChecker
     fun getWsApiManager(): WebSocketApiManager = wsApiManager
